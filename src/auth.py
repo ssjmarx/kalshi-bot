@@ -1,67 +1,55 @@
 import os
 from dotenv import load_dotenv
-from kalshi_python import Configuration, KalshiClient
+from kalshi_python import KalshiClient
+from kalshi_python.configuration import Configuration
 
+# Load environment variables at module level
 load_dotenv()
 
-def get_kalshi_credentials():
-    key_id = os.getenv("KALSHI_KEY_ID")
-    private_key_path = "secrets/kalshi_private.pem"
-    
-    # Clean the Key ID (remove accidental quotes or spaces)
-    if key_id:
-        key_id = key_id.strip().strip('"').strip("'")
-        
-    if not key_id:
-        raise ValueError("KALSHI_KEY_ID not found in env")
-    
-    if not os.path.exists(private_key_path):
-        raise FileNotFoundError(f"Private key file not found at {private_key_path}")
-        
-    with open(private_key_path, "r") as f:
-        private_key = f.read()
-        
-    # STRICT CLEANING for the Private Key
-    private_key = private_key.strip()
-        
-    return key_id, private_key
 
-def get_demo_client():
-    # 1. Get credentials
-    key_id, private_key = get_kalshi_credentials()
-    
-    # 2. Create the Configuration object INSIDE this function
-    # This ensures 'config' always exists when this function runs.
-    config = Configuration(
-        host="https://api.elections.kalshi.com/trade-api/v2"
-    )
-    
-    # 3. Manually assign the keys
-    config.api_key_id = key_id
-    config.private_key_pem = private_key
-    
-    # 4. Create and return the client
-    try:
-        client = KalshiClient(config)
-        return client
-    except Exception as e:
-        print(f"Failed to create client: {e}")
-        return None
+class KalshiAuth:
+    """Handles Kalshi API authentication and client initialization."""
 
-def get_current_balance():
-    # We need to create a client instance to call this
-    client = get_demo_client()
-    if client:
-        try:
-            balance_response = client.get_balance()
-            print(f"Balance: ${balance_response.balance / 100:.2f}")
-        except Exception as e:
-            print(f"Error getting balance: {e}")
-    
-if __name__ == "__main__":
-    # This block only runs when you run 'python src/auth.py'
-    # It's just for testing the file itself.
-    client = get_demo_client()
-    if client:
-        print("Connected to Client (Test Run)")
-        get_current_balance()
+    def __init__(self, key_id: str | None = None, private_key_path: str | None = None) -> None:
+        """Initialize authentication using key ID and private key PEM file.
+
+        Args:
+            key_id: Kalshi API key ID (from .env: KALSHI_KEY_ID)
+            private_key_path: Path to private key PEM file (default: secrets/kalshi_private.pem)
+        """
+        # Get credentials from parameters or environment
+        self.key_id = key_id or os.getenv("KALSHI_KEY_ID")
+        self.private_key_path = private_key_path or "secrets/kalshi_private.pem"
+
+        # Validate credentials exist
+        if not self.key_id:
+            raise ValueError(
+                "KALSHI_KEY_ID must be set in .env file or provided as parameter"
+            )
+
+        if not os.path.exists(self.private_key_path):
+            raise FileNotFoundError(
+                f"Private key file not found at: {self.private_key_path}"
+            )
+
+        # Read private key from PEM file
+        with open(self.private_key_path, "r") as f:
+            self.private_key = f.read()
+
+        # Create Configuration object with credentials
+        self.configuration = Configuration(
+            host="https://demo-api.kalshi.co/trade-api/v2"  # Demo API URL v2
+        )
+        self.configuration.api_key_id = self.key_id
+        self.configuration.private_key_pem = self.private_key
+
+        # Initialize Kalshi client with configuration
+        self.client = KalshiClient(self.configuration)
+
+    def get_client(self) -> KalshiClient:
+        """Return the authenticated Kalshi client.
+
+        Returns:
+            KalshiClient: Authenticated client for API calls
+        """
+        return self.client
